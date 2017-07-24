@@ -184,21 +184,23 @@ int main()
           std::cout << std::fixed;
           std::cout << std::setprecision(5);
 
-          std::cout << "CTE: " <<  cte 
-          <<std::setw(10) << "Step: " << pid.step 
-          <<std::setw(10) << "Speed: "<< speed
-          <<std::setw(10) << "angle: "<< angle
+          std::cout << "Step: " << pid.step 
+          <<std::setw(5) << "\tCTE: " <<  cte 
+          
+          <<std::setw(10) << "\tangle: "<< angle
+          <<std::setw(10) << "\tSpeed: "<< speed
           <<std::setw(10) << "\tThrottle: "<< throttle
-
+          
+          
           <<std::setw(10) <<"\tpid throttle: " <<pid_throttle.throttle
-          <<std::setw(10) <<"T Kp: "  << pid_throttle.Kp 
-          <<std::setw(10) <<"T Ki: "  << pid_throttle.Ki 
-          <<std::setw(10) <<"T Kd: "  << pid_throttle.Kd
+          <<std::setw(5) <<"\tT Kp: "  << pid_throttle.Kp 
+          <<std::setw(5) <<"\tT Ki: "  << pid_throttle.Ki 
+          <<std::setw(10) <<"\tT Kd: "  << pid_throttle.Kd
 
           <<std::setw(10) <<"\tSteering: "  << steer_value
-          <<std::setw(10) <<"S Kp: " << pid.Kp 
-          <<std::setw(10) <<"S Ki: " << pid.Ki 
-          <<std::setw(10) <<"S Kd: " << pid.Kd <<std::endl;
+          <<std::setw(5) <<"\tS Kp: " << pid.Kp 
+          <<std::setw(5) <<"\tS Ki: " << pid.Ki 
+          <<std::setw(5) <<"\tS Kd: " << pid.Kd <<std::endl;
           
           json msgJson;
           msgJson["steering_angle"] = steer_value;
