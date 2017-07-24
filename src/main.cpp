@@ -3,7 +3,11 @@
 #include "json.hpp"
 #include "PID.h"
 #include <math.h>
-
+#include <stdio.h>
+#include <termios.h>
+#include <unistd.h>
+#include <fcntl.h>
+ 
 // for convenience
 using json = nlohmann::json;
 
@@ -28,12 +32,42 @@ std::string hasData(std::string s) {
   return "";
 }
 
+int kbhit(void)
+{
+  struct termios oldt, newt;
+  int ch;
+  int oldf;
+ 
+  tcgetattr(STDIN_FILENO, &oldt);
+  newt = oldt;
+  newt.c_lflag &= ~(ICANON | ECHO);
+  tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+  oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+  fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+ 
+  ch = getchar();
+ 
+  tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+  fcntl(STDIN_FILENO, F_SETFL, oldf);
+ 
+  if(ch != EOF)
+  {
+    ungetc(ch, stdin);
+    return 1;
+  }
+ 
+  return 0;
+}
+
 int main()
 {
   uWS::Hub h;
 
   PID pid;
   // TODO: Initialize the pid variable.
+  pid.Init(0.075, 0.0001, 3.95);
+  pid.throttle = 0.5;
+  pid.step = 0.01;
 
   h.onMessage([&pid](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -47,9 +81,9 @@ int main()
         std::string event = j[0].get<std::string>();
         if (event == "telemetry") {
           // j[1] is the data JSON object
-          double cte = std::stod(j[1]["cte"].get<std::string>());
-          double speed = std::stod(j[1]["speed"].get<std::string>());
-          double angle = std::stod(j[1]["steering_angle"].get<std::string>());
+          double cte   = std::stod(j[1]["cte"].get<std::string>());
+          //double speed = std::stod(j[1]["speed"].get<std::string>());
+          //double angle = std::stod(j[1]["steering_angle"].get<std::string>());
           double steer_value;
           /*
           * TODO: Calcuate steering value here, remember the steering value is
@@ -57,13 +91,70 @@ int main()
           * NOTE: Feel free to play around with the throttle and speed. Maybe use
           * another PID controller to control the speed!
           */
+
+
+          // keyboard input for parameter tuning
+          char   key_code = 32; //space 
           
+          if ( kbhit() )
+          {
+            key_code = getchar();
+
+            switch (key_code)
+            {
+              case 'c':
+                pid.step *= 10.0;
+                break;
+              case 'f':
+                pid.step *= 0.1;
+                break;
+              case 'w':
+                pid.throttle += 0.1;
+                break;
+              case 's':
+                pid.throttle -= 0.1;
+                break;
+              case 'u': // t
+                pid.Kp += pid.step;
+                break;
+              case 'j': // t
+                pid.Kp -= pid.step;
+                break;
+              case 'i': // t
+                pid.Ki += pid.step;
+                break;
+              case 'k': // t
+                pid.Ki -= pid.step;
+                break;
+              case 'o': // t
+                pid.Kd += pid.step;
+                break;
+              case 'l': // t
+                pid.Kd -= pid.step;
+                break;
+              case 'r': // reset
+                std::string msg = "42[\"reset\",{}]";
+                ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);pid.p_error = 0.0;
+                pid.p_error = 0.0;
+                pid.i_error = 0.0;
+                pid.d_error = 0.0;
+            }
+            
+
+          }
+
+          pid.UpdateError(cte);
+          steer_value = pid.TotalError();
+          // clamp to [-1, 1]
+          steer_value = std::max(-1.0, std::min(steer_value, 1.0));
           // DEBUG
-          std::cout << "CTE: " << cte << " Steering Value: " << steer_value << std::endl;
+          std::cout << "CTE: " << cte << " Steering Value: " << steer_value
+          << "\t Step: "<<pid.step<<"\t Throttle: "<<pid.throttle
+          <<"\tKp: " << pid.Kp << " Ki: " << pid.Ki <<" Kd: " << pid.Kd <<std::endl;
 
           json msgJson;
           msgJson["steering_angle"] = steer_value;
-          msgJson["throttle"] = 0.3;
+          msgJson["throttle"] = pid.throttle;
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
           std::cout << msg << std::endl;
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);

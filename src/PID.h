@@ -17,6 +17,8 @@ public:
   double Ki;
   double Kd;
 
+  double step; // allow online tuning
+  double throttle;
   /*
   * Constructor
   */
