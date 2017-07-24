@@ -64,12 +64,18 @@ int main()
   uWS::Hub h;
 
   PID pid;
+  PID pid_throttle;
+
   // TODO: Initialize the pid variable.
-  pid.Init(0.075, 0.0001, 3.95);
+  pid.Init(0.08, 0.0001, 3.95);
   pid.throttle = 0.5;
   pid.step = 0.01;
 
-  h.onMessage([&pid](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+  pid_throttle.Init(0.15, 1e-7, 15.5);
+  pid_throttle.throttle = 0.5;
+  pid_throttle.step = 0.01;
+
+  h.onMessage([&](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -82,16 +88,16 @@ int main()
         if (event == "telemetry") {
           // j[1] is the data JSON object
           double cte   = std::stod(j[1]["cte"].get<std::string>());
-          //double speed = std::stod(j[1]["speed"].get<std::string>());
-          //double angle = std::stod(j[1]["steering_angle"].get<std::string>());
+          double speed = std::stod(j[1]["speed"].get<std::string>());
+          double angle = std::stod(j[1]["steering_angle"].get<std::string>());
           double steer_value;
+          double throttle;
           /*
           * TODO: Calcuate steering value here, remember the steering value is
           * [-1, 1].
           * NOTE: Feel free to play around with the throttle and speed. Maybe use
           * another PID controller to control the speed!
           */
-
 
           // keyboard input for parameter tuning
           char   key_code = 32; //space 
@@ -102,18 +108,15 @@ int main()
 
             switch (key_code)
             {
-              case 'c':
+              case '=':
                 pid.step *= 10.0;
+                pid_throttle.step *= 10.0;
                 break;
-              case 'f':
+              case '-':
                 pid.step *= 0.1;
+                pid_throttle.step *= 0.1;
                 break;
-              case 'w':
-                pid.throttle += 0.1;
-                break;
-              case 's':
-                pid.throttle -= 0.1;
-                break;
+
               case 'u': // t
                 pid.Kp += pid.step;
                 break;
@@ -132,31 +135,76 @@ int main()
               case 'l': // t
                 pid.Kd -= pid.step;
                 break;
-              case 'r': // reset
+
+              case 'r': // t
+                pid_throttle.Kp += pid_throttle.step;
+                break;
+              case 'f': // t
+                pid_throttle.Kp -= pid_throttle.step;
+                break;
+              case 't': // t
+                pid_throttle.Ki += pid_throttle.step;
+                break;
+              case 'g': // t
+                pid_throttle.Ki -= pid_throttle.step;
+                break;
+              case 'y': // t
+                pid_throttle.Kd += pid_throttle.step;
+                break;
+              case 'h': // t
+                pid_throttle.Kd -= pid_throttle.step;
+                break;
+
+              case 'q': // reset
                 std::string msg = "42[\"reset\",{}]";
-                ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);pid.p_error = 0.0;
+                ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+
                 pid.p_error = 0.0;
                 pid.i_error = 0.0;
                 pid.d_error = 0.0;
+                pid.max_err = 0.0;
+                pid_throttle.p_error = 0.0;
+                pid_throttle.i_error = 0.0;
+                pid_throttle.d_error = 0.0;
+                pid_throttle.max_err = 0.0;
             }
             
 
           }
+
+          pid_throttle.UpdateError(fabs(cte)-0.5 + 0.01*fabs(angle)-0.5);
+          pid_throttle.throttle = 1.25 + pid_throttle.TotalError();
+          throttle = std::max(-1.0, std::min(pid_throttle.throttle, 1.0));
 
           pid.UpdateError(cte);
           steer_value = pid.TotalError();
           // clamp to [-1, 1]
           steer_value = std::max(-1.0, std::min(steer_value, 1.0));
           // DEBUG
-          std::cout << "CTE: " << cte << " Steering Value: " << steer_value
-          << "\t Step: "<<pid.step<<"\t Throttle: "<<pid.throttle
-          <<"\tKp: " << pid.Kp << " Ki: " << pid.Ki <<" Kd: " << pid.Kd <<std::endl;
+          std::cout << std::fixed;
+          std::cout << std::setprecision(5);
 
+          std::cout << "CTE: " <<  cte 
+          <<std::setw(10) << "Step: " << pid.step 
+          <<std::setw(10) << "Speed: "<< speed
+          <<std::setw(10) << "angle: "<< angle
+          <<std::setw(10) << "\tThrottle: "<< throttle
+
+          <<std::setw(10) <<"\tpid throttle: " <<pid_throttle.throttle
+          <<std::setw(10) <<"T Kp: "  << pid_throttle.Kp 
+          <<std::setw(10) <<"T Ki: "  << pid_throttle.Ki 
+          <<std::setw(10) <<"T Kd: "  << pid_throttle.Kd
+
+          <<std::setw(10) <<"\tSteering: "  << steer_value
+          <<std::setw(10) <<"S Kp: " << pid.Kp 
+          <<std::setw(10) <<"S Ki: " << pid.Ki 
+          <<std::setw(10) <<"S Kd: " << pid.Kd <<std::endl;
+          
           json msgJson;
           msgJson["steering_angle"] = steer_value;
-          msgJson["throttle"] = pid.throttle;
+          msgJson["throttle"] = throttle;
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
+          //std::cout << msg << std::endl;
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {

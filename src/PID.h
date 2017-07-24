@@ -19,6 +19,8 @@ public:
 
   double step; // allow online tuning
   double throttle;
+
+  double max_err;
   /*
   * Constructor
   */
